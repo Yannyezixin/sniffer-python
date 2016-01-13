@@ -4,6 +4,7 @@
 import ctypes
 
 class ICMP(ctypes.Structure):
+    """ICMP Structure"""
     _fields_ = [
         ('type', ctypes.c_ubyte),
         ('code', ctypes.c_ubyte),

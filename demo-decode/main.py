@@ -9,7 +9,7 @@ from ICMPHeader import ICMP
 
 logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(filename)s:%(lineno)d [%(levelname)s] %(message)s',datefmt='%Y/%m/%d %H:%M:%S')
 # host to listen on
-HOST = '192.168.199.183'
+HOST = '0.0.0.0'
 
 def main():
     socket_protocol = socket.IPPROTO_IP
@@ -19,9 +19,29 @@ def main():
 
     while True:
         raw_buffer = sniffer.recvfrom(65565)[0]
+        eth_length = parse_mac(raw_buffer)
         iph_length = parse_ip(raw_buffer)
-        parse_icmp(raw_buffer, iph_length)
         parse_tcp(raw_buffer, iph_length)
+        parse_udp(raw_buffer, iph_length + eth_length)
+        parse_icmp(raw_buffer, iph_length)
+
+def eth_addr (a) :
+  b = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
+  return b
+
+
+def parse_mac(raw_buffer):
+    #parse ethernet header
+    eth_length = 14
+
+    eth_header = raw_buffer[:eth_length]
+    eth = struct.unpack('!6s6sH' , eth_header)
+    eth_protocol = socket.ntohs(eth[2])
+    logging.debug('Destination MAC : ' + eth_addr(raw_buffer[0:6]) + \
+                  ' Source MAC : ' + eth_addr(raw_buffer[6:12]) + ' Protocol : ' + str(eth_protocol))
+
+    return eth_length
+
 
 
 def parse_tcp(raw_buffer, iph_length):
@@ -44,6 +64,22 @@ def parse_tcp(raw_buffer, iph_length):
                    ))
 
 
+def parse_udp(raw_buffer, idx):
+    udph_length = 8
+    udp_header =raw_buffer[idx: idx + udph_length]
+
+    udph = struct.unpack('!HHHH', udp_header)
+
+    source_port = udph[0]
+    dest_port = udph[1]
+    length = udph[2]
+    checksum = udph[3]
+
+    logging.debug(('UDP => Source Port: {source_port}, Dest Port: {dest_port} '
+                   'Length: {length} CheckSum: {checksum}').format(
+                        source_port = source_port, dest_port = dest_port,
+                       length = length, checksum = checksum
+                   ))
 
 
 def parse_ip(raw_buffer):
@@ -79,7 +115,8 @@ def parse_icmp(raw_buffer, iph_length):
     buf = raw_buffer[iph_length : iph_length + ctypes.sizeof(ICMP)]
     icmp_header = ICMP(buf)
 
-    logging.debug(('ICMP -> Type:%d, Code: %d' % (icmp_header.type, icmp_header.code)))
+    logging.debug(('ICMP -> Type:%d, Code: %d, CheckSum: %d'
+                   % (icmp_header.type, icmp_header.code, icmp_header.checksum)))
 
 
 
